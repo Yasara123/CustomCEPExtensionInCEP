@@ -52,7 +52,6 @@ public class MaxByKLinks extends StreamProcessor {
     private VariableExpressionExecutor variableExpressionOwner;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private final ScheduledExecutorService titleContanerscheduler = Executors.newScheduledThreadPool(1);
-    private long lastCalculatedTime;
 
     private class EventComparator implements Comparator<StreamEvent> {
         @Override

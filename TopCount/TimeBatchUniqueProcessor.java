@@ -23,7 +23,7 @@ import org.wso2.siddhi.query.api.definition.Attribute;
 public class TimeBatchUniqueProcessor extends StreamProcessor {
     private VariableExpressionExecutor userName;
     private VariableExpressionExecutor userParty;
-    private Map<String, StreamEvent> map;
+    private Map<String, StreamEvent> usersMap;
     private int trumpCount, bernieCount, clintonCount, cruzCount;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
@@ -31,7 +31,7 @@ public class TimeBatchUniqueProcessor extends StreamProcessor {
     public void start() {
         scheduler.scheduleAtFixedRate(new Runnable() {
             public void run() {
-                map = new ConcurrentHashMap<String, StreamEvent>();
+                usersMap = new ConcurrentHashMap<String, StreamEvent>();
                 trumpCount = 0;
                 bernieCount = 0;
                 clintonCount = 0;
@@ -63,7 +63,7 @@ public class TimeBatchUniqueProcessor extends StreamProcessor {
         ComplexEventChunk<StreamEvent> returnEventChunk = new ComplexEventChunk<StreamEvent>();
         while (streamEventChunk.hasNext()) {
             streamEvent = streamEventChunk.next();
-            StreamEvent oldEvent = map.put((String) userName.execute(streamEvent), streamEvent);
+            StreamEvent oldEvent = usersMap.put((String) userName.execute(streamEvent), streamEvent);
             if (oldEvent == null) {
                 String party = (String) userParty.execute(streamEvent);
                 if ("TRUMP".equals(party)) {

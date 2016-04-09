@@ -40,7 +40,6 @@ public class MaxByK extends StreamProcessor {
     private VariableExpressionExecutor variableExpressionRank;
     private VariableExpressionExecutor variableExpressionRt;
     private VariableExpressionExecutor variableExpressionFt;
-    private long lastCalculatedTime;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     private class EventComparator implements Comparator<StreamEvent> {
@@ -264,8 +263,6 @@ public class MaxByK extends StreamProcessor {
         } else {
             variableExpressionRt = (VariableExpressionExecutor) attributeExpressionExecutors[7];
         }
-
-        lastCalculatedTime = executionPlanContext.getTimestampGenerator().currentTime();
         eventComparator = new EventComparator();
         List<Attribute> attributeList = new ArrayList<Attribute>();
         attributeList.add(new Attribute("Index", Attribute.Type.INT));
