@@ -1,7 +1,9 @@
-package org.wso2.siddhi.extension.CustomWin;
+package org.wso2.siddhi.extension.customwin;
 
 import java.util.*;
-
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.wso2.siddhi.core.config.ExecutionPlanContext;
@@ -13,7 +15,6 @@ import org.wso2.siddhi.core.executor.ConstantExpressionExecutor;
 import org.wso2.siddhi.core.executor.ExpressionExecutor;
 import org.wso2.siddhi.core.executor.VariableExpressionExecutor;
 import org.wso2.siddhi.core.executor.math.divide.DivideExpressionExecutorDouble;
-import org.wso2.siddhi.core.executor.math.divide.DivideExpressionExecutorLong;
 import org.wso2.siddhi.core.query.processor.Processor;
 import org.wso2.siddhi.core.query.processor.stream.StreamProcessor;
 import org.wso2.siddhi.query.api.definition.AbstractDefinition;
@@ -25,21 +26,22 @@ import org.wso2.siddhi.query.api.definition.Attribute;
  * from inputStream#Customwindow.maxByK(200,5, "ln(R)-kt", "*",'Tweet text','rank')
  * select attribute1, attribute2
  * insert into outputStream;
- * */
+ */
 
-public class maxByK extends StreamProcessor {
-    private static final Logger logger = LoggerFactory.getLogger( maxByK.class);
+public class MaxByK extends StreamProcessor {
+    private static final Logger LOG = LoggerFactory.getLogger(MaxByK.class);
     private static DivideExpressionExecutorDouble constantFunctionExecutor;
-    private int PassToOut;
-    private int Lengthtokeep;
-    private ArrayList<StreamEvent> sortedWindow = new ArrayList<StreamEvent>();
+    private int passToOut;
+    private int lengthtokeep;
+    private List<StreamEvent> sortedWindow = new ArrayList<StreamEvent>();
     private EventComparator eventComparator;
     private VariableExpressionExecutor variableExpressionExecutor;
     private VariableExpressionExecutor variableExpressionCount;
     private VariableExpressionExecutor variableExpressionRank;
     private VariableExpressionExecutor variableExpressionRt;
     private VariableExpressionExecutor variableExpressionFt;
-   
+    private long lastCalculatedTime;
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     private class EventComparator implements Comparator<StreamEvent> {
         @Override
@@ -51,84 +53,84 @@ public class maxByK extends StreamProcessor {
             comparisonResult = comparableVariable1.compareTo(comparableVariable2);
             if (comparisonResult != 0) {
                 return (-1) * comparisonResult;
-            } else
+            } else {
                 return 0;
+            }
         }
     }
 
     @Override
     public void start() {
-        // TODO Auto-generated method stub
+        scheduler.scheduleAtFixedRate(new Runnable() {
+            public void run() {
+                double rank = 0;
+                for (int i = 0; i < sortedWindow.size(); i++) {
+                    try {
+                        rank = (Double) constantFunctionExecutor.execute(sortedWindow.get(i));
+                    } catch (ClassCastException e) {
+                        LOG.error("ClassCastException in maxByKLinks when cast rank to double of current window events "
+                                + e);
+                    }
+                    setAttributeRank(sortedWindow.get(i), rank);
+                }
+                LOG.info("Calcutaled sorted window rank to recent time in maxByk");
+            }
+
+        }, 0, 5, TimeUnit.MINUTES);
 
     }
 
     @Override
     public void stop() {
-        // TODO Auto-generated method stub
-
+        scheduler.shutdown();
     }
 
     @Override
     public Object[] currentState() {
-        // TODO Auto-generated method stub
         return new Object[] { sortedWindow };
     }
 
     @Override
     public void restoreState(Object[] state) {
-        // TODO Auto-generated method stub
         sortedWindow = (ArrayList<StreamEvent>) state[0];
     }
 
     @Override
     protected void process(ComplexEventChunk<StreamEvent> streamEventChunk, Processor nextProcessor,
             StreamEventCloner streamEventCloner, ComplexEventPopulater complexEventPopulater) {
-        // TODO Auto-generated method stub
         ComplexEventChunk<StreamEvent> returnEventChunk = new ComplexEventChunk<StreamEvent>();
         StreamEvent streamEvent;
-        Double r = -1.0;
-        // boolean firstEle=false;
+        Double rank = -1.0;
         while (streamEventChunk.hasNext()) {
             streamEvent = streamEventChunk.next();
             streamEventChunk.remove();
-            for (int i = 0; i < sortedWindow.size(); i++) {
-                try {
-                    r = (Double) constantFunctionExecutor.execute(sortedWindow.get(i));
-                } catch (ClassCastException e) {
-                    e.getMessage();
-                }
-                setAttributeRank(sortedWindow.get(i), r);
-            }
             try {
-                r = (Double) constantFunctionExecutor.execute(streamEvent);
+                rank = (Double) constantFunctionExecutor.execute(streamEvent);
 
             } catch (ClassCastException e) {
-                //e.getMessage();
-                if (logger.isInfoEnabled()) {
-                    logger.error("Error in maxByK "+e.getMessage());
-                }
+                LOG.error("ClassCastException in maxByKLinks when cast rank to double of new event " + e);
             }
-            streamEvent = setAttributeRank(streamEvent, r);
+            streamEvent = setAttributeRank(streamEvent, rank);
             boolean duplicate = false;
 
-            if ((sortedWindow.size() < Lengthtokeep)) {
-                duplicate = IsDuplicate(streamEvent);
+            if (sortedWindow.size() < lengthtokeep) {
+                duplicate = isDuplicate(streamEvent);
                 if (duplicate == false) {
                     sortedWindow.add(streamEvent);
                     Collections.sort(sortedWindow, eventComparator);
                 }
-            } else if (((Double) variableExpressionRank.execute(sortedWindow.get(sortedWindow.size() - 1)) > (Double) variableExpressionRank
-                    .execute(streamEvent)) || (variableExpressionExecutor.execute(streamEvent).equals("null"))) {
+            } else if ((Double) variableExpressionRank.execute(sortedWindow.get(sortedWindow.size() - 1)) > (Double) variableExpressionRank
+                    .execute(streamEvent) || "null".equals(variableExpressionExecutor.execute(streamEvent))) {
                 continue;
             } else {
-                duplicate = IsDuplicate(streamEvent);
+                duplicate = isDuplicate(streamEvent);
                 if (duplicate == false) {
                     sortedWindow.remove(sortedWindow.size() - 1);
                     sortedWindow.add(streamEvent);
                     Collections.sort(sortedWindow, eventComparator);
                 }
 
-                for (int j = 0; j < PassToOut; j++) {                   
+                for (int j = 0; j < passToOut; j++) {
                     StreamEvent clonedEvent = streamEventCloner.copyStreamEvent(sortedWindow.get(j));
                     complexEventPopulater.populateComplexEvent(clonedEvent, new Object[] { j + 1 });
                     returnEventChunk.add(clonedEvent);
@@ -150,6 +152,8 @@ public class maxByK extends StreamProcessor {
         case 2:
             event.setOutputData(val, variableExpressionRank.getPosition()[3]);
             break;
+        default:
+            LOG.error("Error in update rank in maxByK class");
         }
         return event;
     }
@@ -165,6 +169,8 @@ public class maxByK extends StreamProcessor {
         case 2:
             event.setOutputData(val, variableExpressionRt.getPosition()[3]);
             break;
+        default:
+            LOG.error("Error in update retweet in maxByK class");
         }
         return event;
     }
@@ -180,11 +186,13 @@ public class maxByK extends StreamProcessor {
         case 2:
             event.setOutputData(val, variableExpressionFt.getPosition()[3]);
             break;
+        default:
+            LOG.error("Error in update favourite in maxByK class");
         }
         return event;
     }
 
-    private boolean IsDuplicate(StreamEvent event) {
+    private boolean isDuplicate(StreamEvent event) {
         boolean duplicate = false;
         for (int i = sortedWindow.size() - 1; i >= 0; i--) {
             if (variableExpressionExecutor.execute(sortedWindow.get(i)).equals(
@@ -211,18 +219,16 @@ public class maxByK extends StreamProcessor {
     @Override
     protected List<Attribute> init(AbstractDefinition inputDefinition,
             ExpressionExecutor[] attributeExpressionExecutors, ExecutionPlanContext executionPlanContext) {
-        // TODO Auto-generated method stub
-        if (!(attributeExpressionExecutors.length==8)) {
-            throw new UnsupportedOperationException(
-                    "Invalid number of Arguments");
-        } 
+        if (!(attributeExpressionExecutors.length == 8)) {
+            throw new UnsupportedOperationException("Invalid number of Arguments");
+        }
         if (attributeExpressionExecutors[0] instanceof ConstantExpressionExecutor) {
-            Lengthtokeep = ((Integer) attributeExpressionExecutors[0].execute(null));
+            lengthtokeep = ((Integer) attributeExpressionExecutors[0].execute(null));
         } else {
             throw new UnsupportedOperationException("The first parameter should be an integer");
         }
         if (attributeExpressionExecutors[1] instanceof ConstantExpressionExecutor) {
-            PassToOut = ((Integer) attributeExpressionExecutors[1].execute(null));
+            passToOut = ((Integer) attributeExpressionExecutors[1].execute(null));
         } else {
             throw new UnsupportedOperationException("The first parameter should be an integer");
         }
@@ -258,10 +264,9 @@ public class maxByK extends StreamProcessor {
         } else {
             variableExpressionRt = (VariableExpressionExecutor) attributeExpressionExecutors[7];
         }
-      
 
+        lastCalculatedTime = executionPlanContext.getTimestampGenerator().currentTime();
         eventComparator = new EventComparator();
-
         List<Attribute> attributeList = new ArrayList<Attribute>();
         attributeList.add(new Attribute("Index", Attribute.Type.INT));
         return attributeList;
