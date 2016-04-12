@@ -82,7 +82,7 @@ public class SentimentRateStanford extends FunctionExecutor {
         // read some text in the text variable
         int totRate=0;
         String sentimentText = (String) data;
-        String[] ratings = { "Very Necomedy animated gifcomedy animated gifgative", "Negative", "Neutral", "Positive",
+        String[] ratings = { "Very Negative", "Negative", "Neutral", "Positive",
                 "Very Positive" };
         Annotation annotation = pipeline.process(sentimentText);
         for (CoreMap sentence : annotation.get(CoreAnnotations.SentencesAnnotation.class)) {
